@@ -1,0 +1,67 @@
+Test de verificare github
+1. Ce este un depozit și ce conține el în plus față de un folder obișnuit de pe calculator?
+ Un dosar pe GitHub, cu foldere și fișiere, care are o adresă proprie.
+  
+2. Ce este un commit? Ce informații înregistrează GitHub la fiecare commit?
+  Fișierele adăugate sau modificate se înregistrează în depozit împreună cu o scurtă descriere, data, ora și autorul.
+
+3. Care sunt regulile GitHub pentru parolă și pentru numele de utilizator?
+Parola: trebuie să respecte cerințele de securitate ale GitHub și să fie suficient de puternică. Este recomandată o parolă unică, greu de ghicit.
+Numele de utilizator: poate conține caractere alfanumerice și cratime (-), dar nu poate începe sau se termina cu o cratimă și nu poate conține două cratime consecutive.
+
+4. Dintre numele de utilizator ana-ionescu, -ana-, ana ionescu și ana_ionescu, care sunt acceptate de GitHub? Se justifică răspunsul pentru fiecare.
+ana-ionescu - Da - Cratima este permisă în interiorul numelui.
+-ana- - Nu - Începe și se termină cu o cratimă.
+ana ionescu - Nu- Conține un spațiu.
+ana_ionescu - Nu - Caracterul _ nu este permis în numele de utilizator GitHub.
+
+5. Ce se face pe calculatorul din laborator la sfârșitul orei și de ce?
+Pe calculatorul din laborator, parola nu se salvează în browser, iar la sfârșitul orei se iese din cont: clic pe imaginea de profil (dreapta sus), apoi Sign out.
+
+6. Prin ce diferă un depozit Public de unul Private? Care se alege pentru portofoliu și de ce?
+Public: poate fi vizualizat de oricine.
+Private: poate fi accesat doar de proprietar și de persoanele autorizate.
+Pentru portofoliu se alege Public: numai așa se poate publica site-ul cu un cont gratuit.
+
+7. Se rescriu corect numele: Temă 2 Pliant (folder), Pliant FINAL.PDF (fișier).
+Folder: tema-2-pliant
+Fișier: pliant-final.pdf
+
+8. Care sunt limitele la încărcarea din browser (mărimea unui fișier, numărul de fișiere)?
+Limite: din browser, un fișier poate avea cel mult 25 MB și se pot încărca cel mult 100 de fișiere o dată.
+
+9. Afișul a fost corectat. Cum se încarcă varianta nouă și ce se întâmplă cu cea veche?
+Se încarcă fișierul corectat folosind același nume și aceeași cale, apoi se salvează modificarea printr-un commit.
+
+10. Se scrie un mesaj de commit potrivit pentru: „s-a înlocuit fotografia de pe fața pliantului de la tema 2”.
+Înlocuirea fotografiei de pe fața pliantului de la tema 2
+
+11. Utilizatorul maria-stan are depozitul portofoliu-media, cu fișierul pliant.pdf în folderul tema-02-pliant. Se scriu: adresa depozitului, adresa site-ului și adresa fișierului pe site.
+Adresa depozitului: https://github.com/maria-stan/portofoliu-media
+Adresa site-ului GitHub Pages: https://maria-stan.github.io/portofoliu-media/
+Adresa fișierului PDF pe site: https://maria-stan.github.io/portofoliu-media/tema-02-pliant/pliant.pdf
+
+12. Care sunt pașii de activare a GitHub Pages? Ce fișier este prima pagină a site-ului?
+Se deschide depozitul pe GitHub.
+Se intră în Settings.
+Se selectează Pages.
+La Build and deployment, se alege publicarea dintr-o ramură (Deploy from a branch).
+Se selectează ramura main și folderul / (root).
+Se apasă Save și se așteaptă publicarea site-ului.
+
+13. Fragmentul următor, dintr-un index.html, conține patru greșeli. Fișierele din depozit sunt tema-02-pliant/pliant.pdf și tema-02-pliant/pliant-fata.png. Se rescrie corect.
+<h2>Tema 2 – Pliant
+<img src="C:\Users\Maria\Desktop\pliant-fata.png" alt="Fața pliantului">
+<img src="tema-02-pliant/pliant.pdf" alt="Pliantul">
+<p><a href="Tema-02-Pliant/Pliant.pdf">Deschide pliantul (PDF)</a></p>
+
+
+<h2>Tema 2 – Pliant</h2>
+<img src="tema-02-pliant/pliant-fata.png" alt="Fața pliantului">
+<p><a href="tema-02-pliant/pliant.pdf">Deschide pliantul (PDF)</a></p>
+
+
+14. Se numesc trei lucruri care nu se publică într-un depozit public.
+Parole și coduri de autentificare.
+Date personale, precum adresa de domiciliu sau numărul de telefon.
+Chei API, tokenuri secrete și alte informații confidențiale.
