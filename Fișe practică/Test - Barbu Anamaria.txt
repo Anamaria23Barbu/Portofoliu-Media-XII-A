@@ -1,0 +1,12 @@
+1. Ce standard de culori se utilizeaza pentru display-urile digitale, dar pentru afisarea pe web?
+2. Da-ti exemplu de un standard de culorare aditiv
+3. Utilizand simulatorul din fisele de practica obtinei culoarea lilac
+4. Cate universuri are standardul dmx?
+5. Pentru un magistral de comunicatii dmx daca avem bara cu led-uri pe 4 canale (ce inseamna 4 canale in dmx, cate echipamente putem pune pe un univers)
+
+1. Pentru display se utilizeaza RGB, iar pentru afisarea web este utilizat sRGB
+2. Un exemplu de standard/spațiu de culoare aditiv este sRGB (Standard RGB)
+3. R-250, G-162, B-200
+4. Un univers DMX-512 are 512 canale DMX
+5. Dacă o bară LED este configurată în 4 canale DMX, înseamnă că ea ocupă 4 adrese/canale consecutive din univers.
+   Putem avea maximum 128 de bare LED de câte 4 canale
