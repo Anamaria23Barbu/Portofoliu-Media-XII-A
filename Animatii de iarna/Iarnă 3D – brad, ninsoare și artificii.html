@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iarnă 3D – brad, ninsoare și artificii</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #050a18; overflow: hidden;
+               font-family: system-ui, "Segoe UI", Roboto, sans-serif; color: #eaf2ff; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #start { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 14px;
+           align-items: center; justify-content: center; text-align: center;
+           background: rgba(5,10,24,.72); padding: 24px; }
+  #start h1 { margin: 0; font-size: clamp(26px, 6vw, 46px); font-weight: 600; }
+  #start p { margin: 0; max-width: 34em; opacity: .85; line-height: 1.45; }
+  button { font: inherit; color: #eaf2ff; background: rgba(120,160,255,.16);
+           border: 1px solid rgba(170,200,255,.45); border-radius: 999px;
+           padding: 10px 18px; cursor: pointer; }
+  button:hover, button:focus-visible { background: rgba(120,160,255,.32); outline: none; }
+  button[aria-pressed="true"] { background: rgba(255,210,120,.3); border-color: #ffd98a; }
+  #start button { font-size: 18px; padding: 14px 30px; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 14px; display: none;
+         flex-wrap: wrap; gap: 8px; justify-content: center; padding: 0 10px; }
+  #err { position: fixed; top: 10px; left: 10px; right: 10px; color: #ffb3b3; display: none; }
+</style>
+</head>
+<body>
+<canvas id="scena"></canvas>
+
+<div id="start">
+  <h1>Iarnă 3D</h1>
+  <p>Brad cu lumini, ninsoare și artificii generate în întregime din script
+     (Three.js), cu sunet sintetizat din cod (Web Audio) – fără niciun fișier audio sau imagine.</p>
+  <button id="btnStart">Pornește animația</button>
+</div>
+
+<div id="bar">
+  <button id="btnSunet" aria-pressed="true">Sunet</button>
+  <button id="btnMuzica" aria-pressed="true">Clopoței</button>
+  <button id="btnViscol" aria-pressed="false">Viscol</button>
+  <button id="btnArtificii">Artificii</button>
+  <button id="btnAuto" aria-pressed="true">Artificii automate</button>
+</div>
+<div id="err"></div>
+
+<script type="module">
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
+
+/* =====================================================================
+   1. SCENA, CAMERA, RENDERER
+   ===================================================================== */
+const canvas = document.getElementById('scena');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050a18);
+scene.fog = new THREE.FogExp2(0x0a1430, 0.022);          // ceața de iarnă
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 300);
+
+function redimensionare() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', redimensionare);
+redimensionare();
+
+/* =====================================================================
+   2. LUMINI
+   ===================================================================== */
+scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x223355, 0.75));   // lumina cerului
+const luna = new THREE.DirectionalLight(0xbfd4ff, 0.9);
+luna.position.set(-8, 14, 6);
+scene.add(luna);
+const luminaBrad = new THREE.PointLight(0xffc070, 30, 22);        // lumina caldă a bradului
+luminaBrad.position.set(0, 4, 0);
+scene.add(luminaBrad);
+const luminaArtificii = new THREE.PointLight(0xffffff, 0, 80);    // fulgerul artificiilor
+luminaArtificii.position.set(0, 18, -6);
+scene.add(luminaArtificii);
+
+/* =====================================================================
+   3. TEXTURĂ ROTUNDĂ (generată pe canvas) pentru fulgi, scântei, stele
+   ===================================================================== */
+function texturaPunct() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+const texPunct = texturaPunct();
+
+/* =====================================================================
+   4. SOLUL ÎNZĂPEZIT (plan deformat în dealuri line)
+   ===================================================================== */
+const geoSol = new THREE.PlaneGeometry(160, 160, 80, 80);
+geoSol.rotateX(-Math.PI / 2);
+const pSol = geoSol.attributes.position;
+for (let i = 0; i < pSol.count; i++) {
+  const x = pSol.getX(i), z = pSol.getZ(i);
+  const d = Math.hypot(x, z);
+  const deal = Math.sin(x * 0.11) * Math.cos(z * 0.09) * 1.3 + Math.sin(x * 0.31 + z * 0.27) * 0.25;
+  pSol.setY(i, deal * Math.min(1, d / 14));               // plat lângă brad, dealuri în depărtare
+}
+geoSol.computeVertexNormals();
+scene.add(new THREE.Mesh(geoSol,
+  new THREE.MeshStandardMaterial({ color: 0xe6eeff, roughness: 0.95 })));
+
+/* =====================================================================
+   5. BRADUL: trunchi + etaje conice + căciuli de zăpadă + stea
+   ===================================================================== */
+const brad = new THREE.Group();
+scene.add(brad);
+const ETAJE = 6, H_BRAD = 7.2;
+
+const trunchi = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.38, 1.2, 12),
+  new THREE.MeshStandardMaterial({ color: 0x4a2f1b, roughness: 1 }));
+trunchi.position.y = 0.6;
+brad.add(trunchi);
+
+const matVerde = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.85, flatShading: true });
+const matZapada = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+for (let i = 0; i < ETAJE; i++) {
+  const t = i / (ETAJE - 1);
+  const raza = 2.6 - t * 1.9, inalt = 2.0 - t * 0.5, y = 1.6 + t * (H_BRAD - 2.4);
+  const con = new THREE.Mesh(new THREE.ConeGeometry(raza, inalt, 18), matVerde);
+  con.position.y = y;
+  brad.add(con);
+  const caciula = new THREE.Mesh(new THREE.ConeGeometry(raza * 0.62, inalt * 0.55, 18), matZapada);
+  caciula.position.y = y + inalt * 0.26;
+  brad.add(caciula);
+}
+
+// steaua din vârf (formă cu 5 colțuri, extrudată)
+const forma = new THREE.Shape();
+for (let i = 0; i < 10; i++) {
+  const r = i % 2 ? 0.2 : 0.5, a = i * Math.PI / 5 + Math.PI / 2;
+  i ? forma.lineTo(Math.cos(a) * r, Math.sin(a) * r) : forma.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+}
+const stea = new THREE.Mesh(
+  new THREE.ExtrudeGeometry(forma, { depth: 0.12, bevelEnabled: false }),
+  new THREE.MeshBasicMaterial({ color: 0xffe27a }));
+stea.position.set(0, H_BRAD + 0.5, -0.06);
+brad.add(stea);
+const haloStea = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: texPunct, color: 0xffd866, blending: THREE.AdditiveBlending, depthWrite: false }));
+haloStea.scale.set(3.2, 3.2, 1);
+haloStea.position.set(0, H_BRAD + 0.5, 0);
+brad.add(haloStea);
+
+/* =====================================================================
+   6. GHIRLANDA DE LUMINI: puncte așezate în spirală pe brad
+   ===================================================================== */
+const N_BECURI = 260;
+const CULORI = [0xff3b3b, 0xffd23b, 0x3bff6e, 0x3bb4ff, 0xff5ad6];
+const geoBec = new THREE.BufferGeometry();
+const pozBec = new Float32Array(N_BECURI * 3);
+const culBec = new Float32Array(N_BECURI * 3);
+const culBaza = [];
+for (let i = 0; i < N_BECURI; i++) {
+  const t = i / (N_BECURI - 1);
+  const y = 1.0 + t * (H_BRAD - 1.1);
+  const raza = 2.55 * (1 - t) + 0.12;
+  const unghi = t * Math.PI * 2 * 9;                     // 9 ture de spirală
+  pozBec.set([Math.cos(unghi) * raza, y, Math.sin(unghi) * raza], i * 3);
+  culBaza.push(new THREE.Color(CULORI[i % CULORI.length]));
+}
+geoBec.setAttribute('position', new THREE.BufferAttribute(pozBec, 3));
+geoBec.setAttribute('color', new THREE.BufferAttribute(culBec, 3));
+const becuri = new THREE.Points(geoBec, new THREE.PointsMaterial({
+  size: 0.42, map: texPunct, vertexColors: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false }));
+brad.add(becuri);
+
+function animeazaBecuri(timp) {
+  for (let i = 0; i < N_BECURI; i++) {
+    // fiecare culoare clipește defazat; un „val” urcă pe spirală
+    const clipire = 0.55 + 0.45 * Math.sin(timp * 3 + (i % CULORI.length) * 1.3);
+    const val = 0.6 + 0.4 * Math.sin(timp * 4 - i * 0.12);
+    const k = clipire * val * 1.6;
+    culBec.set([culBaza[i].r * k, culBaza[i].g * k, culBaza[i].b * k], i * 3);
+  }
+  geoBec.attributes.color.needsUpdate = true;
+}
+
+/* =====================================================================
+   7. STELELE DE PE CER
+   ===================================================================== */
+{
+  const n = 900, p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI * 0.45 + 0.06, r = 180;
+    p.set([Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
+    size: 1.3, map: texPunct, color: 0xcfe0ff, transparent: true, opacity: 0.8,
+    fog: false, depthWrite: false })));
+}
+
+/* =====================================================================
+   8. NINSOAREA: sistem de particule cu vânt și legănare
+   ===================================================================== */
+const N_FULGI = 9000, ZONA = 60, PLAFON = 30;
+const geoFulgi = new THREE.BufferGeometry();
+const pozFulgi = new Float32Array(N_FULGI * 3);
+const vitFulgi = new Float32Array(N_FULGI);              // viteza de cădere a fiecărui fulg
+const fazaFulgi = new Float32Array(N_FULGI);             // faza de legănare
+for (let i = 0; i < N_FULGI; i++) {
+  pozFulgi.set([(Math.random() - 0.5) * ZONA, Math.random() * PLAFON, (Math.random() - 0.5) * ZONA], i * 3);
+  vitFulgi[i] = 0.8 + Math.random() * 1.4;
+  fazaFulgi[i] = Math.random() * Math.PI * 2;
+}
+geoFulgi.setAttribute('position', new THREE.BufferAttribute(pozFulgi, 3));
+scene.add(new THREE.Points(geoFulgi, new THREE.PointsMaterial({
+  size: 0.22, map: texPunct, color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false })));
+
+let vant = 0.6, vantTinta = 0.6;                          // viteza vântului (m/s), netezită
+
+function animeazaNinsoare(dt, timp) {
+  vant += (vantTinta - vant) * Math.min(1, dt * 0.8);
+  const rafala = vant * (1 + 0.5 * Math.sin(timp * 0.7));
+  for (let i = 0; i < N_FULGI; i++) {
+    const k = i * 3;
+    pozFulgi[k]     += (rafala + Math.sin(timp * 1.5 + fazaFulgi[i]) * 0.5) * dt;
+    pozFulgi[k + 1] -= vitFulgi[i] * (1 + vant * 0.15) * dt;
+    pozFulgi[k + 2] += Math.cos(timp * 1.2 + fazaFulgi[i]) * 0.4 * dt;
+    if (pozFulgi[k + 1] < 0) pozFulgi[k + 1] += PLAFON;   // fulgul ajuns jos reapare sus
+    if (pozFulgi[k] > ZONA / 2) pozFulgi[k] -= ZONA;      // și cel scos de vânt reintră prin partea opusă
+    if (pozFulgi[k] < -ZONA / 2) pozFulgi[k] += ZONA;
+  }
+  geoFulgi.attributes.position.needsUpdate = true;
+}
+
+/* =====================================================================
+   9. ARTIFICIILE: rachetă care urcă, apoi explozie de scântei cu gravitație
+   ===================================================================== */
+const N_SCANTEI = 6000;
+const geoSc = new THREE.BufferGeometry();
+const pozSc = new Float32Array(N_SCANTEI * 3).fill(-999);
+const culSc = new Float32Array(N_SCANTEI * 3);
+const vitSc = new Float32Array(N_SCANTEI * 3);
+const viataSc = new Float32Array(N_SCANTEI);              // timp rămas (s)
+const durataSc = new Float32Array(N_SCANTEI);
+const bazaSc = new Float32Array(N_SCANTEI * 3);
+geoSc.setAttribute('position', new THREE.BufferAttribute(pozSc, 3));
+geoSc.setAttribute('color', new THREE.BufferAttribute(culSc, 3));
+const scantei = new THREE.Points(geoSc, new THREE.PointsMaterial({
+  size: 0.5, map: texPunct, vertexColors: true, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+scantei.frustumCulled = false;
+scene.add(scantei);
+
+let urmatoareaScanteie = 0;
+function scanteie(x, y, z, vx, vy, vz, culoare, durata) {
+  const i = urmatoareaScanteie;
+  urmatoareaScanteie = (urmatoareaScanteie + 1) % N_SCANTEI;
+  pozSc.set([x, y, z], i * 3);
+  vitSc.set([vx, vy, vz], i * 3);
+  bazaSc.set([culoare.r, culoare.g, culoare.b], i * 3);
+  viataSc[i] = durataSc[i] = durata;
+}
+
+const rachete = [];
+function lanseazaRacheta() {
+  const culoare = new THREE.Color().setHSL(Math.random(), 1, 0.6);
+  rachete.push({
+    x: (Math.random() - 0.5) * 26, y: 0, z: -6 - Math.random() * 14,
+    vy: 15 + Math.random() * 4, tinta: 13 + Math.random() * 8, culoare });
+  sunetSuierat();
+}
+
+function explozie(r) {
+  const n = 420, forma = Math.random();
+  for (let i = 0; i < n; i++) {
+    // direcție uniformă pe sferă
+    const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+    let v = 6 + Math.random() * 2.5;
+    if (forma > 0.66) v *= (i % 2 ? 1 : 0.5);             // explozie dublă (două sfere)
+    const c = forma < 0.33 && i % 3 === 0 ? new THREE.Color(0xffffff) : r.culoare;
+    scanteie(r.x, r.y, r.z, s * Math.cos(a) * v, u * v, s * Math.sin(a) * v, c, 1.6 + Math.random() * 1.2);
+  }
+  luminaArtificii.color.copy(r.culoare);
+  luminaArtificii.position.set(r.x, r.y, r.z);
+  luminaArtificii.intensity = 900;
+  sunetExplozie();
+}
+
+function animeazaArtificii(dt) {
+  for (let j = rachete.length - 1; j >= 0; j--) {
+    const r = rachete[j];
+    r.y += r.vy * dt;
+    scanteie(r.x, r.y, r.z, (Math.random() - 0.5) * 0.6, -1, (Math.random() - 0.5) * 0.6,
+             new THREE.Color(0xffc880), 0.5);              // dâra rachetei
+    if (r.y >= r.tinta) { explozie(r); rachete.splice(j, 1); }
+  }
+  for (let i = 0; i < N_SCANTEI; i++) {
+    if (viataSc[i] <= 0) continue;
+    const k = i * 3;
+    viataSc[i] -= dt;
+    if (viataSc[i] <= 0) { pozSc[k + 1] = -999; continue; }
+    vitSc[k + 1] -= 3.2 * dt;                             // gravitație
+    const fr = 1 - 0.9 * dt;                              // frânare în aer
+    vitSc[k] *= fr; vitSc[k + 1] *= fr; vitSc[k + 2] *= fr;
+    pozSc[k] += vitSc[k] * dt; pozSc[k + 1] += vitSc[k + 1] * dt; pozSc[k + 2] += vitSc[k + 2] * dt;
+    const s = Math.pow(viataSc[i] / durataSc[i], 0.7) * 1.5;   // stingere treptată
+    culSc[k] = bazaSc[k] * s; culSc[k + 1] = bazaSc[k + 1] * s; culSc[k + 2] = bazaSc[k + 2] * s;
+  }
+  geoSc.attributes.position.needsUpdate = true;
+  geoSc.attributes.color.needsUpdate = true;
+  luminaArtificii.intensity *= Math.max(0, 1 - dt * 3.5);
+}
+
+/* =====================================================================
+   10. SUNETUL – sintetizat cu Web Audio (fără fișiere)
+   ===================================================================== */
+let ac = null, master = null, gVant = null, filtruVant = null, bufZgomot = null;
+let muzicaPornita = true, urmatoareaNota = 0, indexNota = 0;
+
+function pornesteAudio() {
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain();
+  master.gain.value = 0.8;
+  master.connect(ac.destination);
+
+  // zgomot alb – materia primă pentru vânt și explozii
+  bufZgomot = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const d = bufZgomot.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+
+  // VÂNTUL: zgomot trecut printr-un filtru trece-bandă a cărui frecvență „șuieră”
+  const src = ac.createBufferSource();
+  src.buffer = bufZgomot; src.loop = true;
+  filtruVant = ac.createBiquadFilter();
+  filtruVant.type = 'bandpass'; filtruVant.frequency.value = 420; filtruVant.Q.value = 1.4;
+  gVant = ac.createGain(); gVant.gain.value = 0.10;
+  src.connect(filtruVant).connect(gVant).connect(master);
+  src.start();
+  urmatoareaNota = ac.currentTime + 0.4;
+}
+
+function zgomot(durata, tip, f0, f1, volum, intarziere = 0) {
+  const t = ac.currentTime + intarziere;
+  const s = ac.createBufferSource(); s.buffer = bufZgomot;
+  const f = ac.createBiquadFilter(); f.type = tip;
+  f.frequency.setValueAtTime(f0, t);
+  f.frequency.exponentialRampToValueAtTime(f1, t + durata);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(volum, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + durata);
+  s.connect(f).connect(g).connect(master);
+  s.start(t, Math.random()); s.stop(t + durata);
+}
+
+function sunetSuierat() {                                  // racheta care urcă
+  if (!ac) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(500, t);
+  o.frequency.exponentialRampToValueAtTime(1900, t + 1.0);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05, t + 0.2);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+  o.connect(g).connect(master); o.start(t); o.stop(t + 1.2);
+}
+
+function sunetExplozie() {
+  if (!ac) return;
+  zgomot(1.4, 'lowpass', 900, 60, 0.9);                    // bubuitura
+  for (let i = 0; i < 14; i++)                             // pocniturile scânteilor
+    zgomot(0.06, 'highpass', 3500, 6000, 0.12, 0.25 + Math.random() * 1.1);
+}
+
+// CLOPOȚEI: melodie proprie simplă, în Do major, cu timbru de clopoțel
+// (fundamentală + armonică nearmonică 2,76×, atac rapid, stingere lungă)
+const DO = 523.25, RE = 587.33, MI = 659.25, SOL = 783.99, LA = 880.0, DO2 = 1046.5;
+const MELODIE = [ [MI,1],[SOL,1],[DO2,2], [LA,1],[SOL,1],[MI,2],
+                  [RE,1],[MI,1],[SOL,1],[MI,1],[RE,2],[0,2],
+                  [MI,1],[SOL,1],[DO2,2], [LA,1],[DO2,1],[SOL,2],
+                  [MI,1],[RE,1],[DO,1],[RE,1],[DO,2],[0,2] ];
+const TIMP = 0.3;                                          // durata unui timp (s)
+
+function clopotel(frecv, t) {
+  for (const [mult, vol] of [[1, 0.16], [2.76, 0.05], [5.4, 0.02]]) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.value = frecv * mult;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.3 / Math.sqrt(mult));
+    o.connect(g).connect(master); o.start(t); o.stop(t + 1.4);
+  }
+}
+
+function programeazaMuzica() {
+  // notele se programează cu puțin înainte, pe ceasul precis al plăcii de sunet
+  if (!ac || !muzicaPornita) return;
+  if (urmatoareaNota < ac.currentTime) urmatoareaNota = ac.currentTime + 0.1;
+  while (urmatoareaNota < ac.currentTime + 0.5) {
+    const [f, d] = MELODIE[indexNota];
+    if (f) clopotel(f, urmatoareaNota);
+    urmatoareaNota += d * TIMP;
+    indexNota = (indexNota + 1) % MELODIE.length;
+  }
+}
+
+function actualizeazaVant(timp) {
+  if (!ac) return;
+  const tarie = Math.min(1, vant / 6);
+  gVant.gain.setTargetAtTime(0.06 + tarie * 0.5, ac.currentTime, 0.4);
+  filtruVant.frequency.setTargetAtTime(380 + tarie * 500 + Math.sin(timp * 0.7) * 160, ac.currentTime, 0.3);
+}
+
+/* =====================================================================
+   11. BUTOANELE
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+let pornit = false, autoArtificii = true, urmatoareaLansare = 2;
+
+function comuta(btn) {
+  const v = btn.getAttribute('aria-pressed') !== 'true';
+  btn.setAttribute('aria-pressed', v);
+  return v;
+}
+$('btnStart').addEventListener('click', () => {
+  try { pornesteAudio(); } catch (e) { /* fără sunet, animația merge oricum */ }
+  $('start').style.display = 'none';
+  $('bar').style.display = 'flex';
+  pornit = true;
+});
+$('btnSunet').addEventListener('click', e => {
+  const v = comuta(e.currentTarget);
+  if (master) master.gain.setTargetAtTime(v ? 0.8 : 0, ac.currentTime, 0.05);
+});
+$('btnMuzica').addEventListener('click', e => { muzicaPornita = comuta(e.currentTarget); });
+$('btnViscol').addEventListener('click', e => { vantTinta = comuta(e.currentTarget) ? 6 : 0.6; });
+$('btnArtificii').addEventListener('click', () => { for (let i = 0; i < 3; i++) setTimeout(lanseazaRacheta, i * 350); });
+$('btnAuto').addEventListener('click', e => { autoArtificii = comuta(e.currentTarget); });
+
+/* =====================================================================
+   12. BUCLA DE ANIMAȚIE
+   ===================================================================== */
+const ceas = new THREE.Clock();
+let timp = 0;
+
+function cadru() {
+  const dt = Math.min(ceas.getDelta(), 0.05);              // limitat, ca să nu „sară” după o pauză
+  timp += dt;
+
+  // camera se rotește lent în jurul bradului
+  const u = timp * 0.12;
+  camera.position.set(Math.sin(u) * 15, 5.2 + Math.sin(timp * 0.2) * 1.2, Math.cos(u) * 15);
+  camera.lookAt(0, 5.6, 0);
+
+  animeazaBecuri(timp);
+  animeazaNinsoare(dt, timp);
+  animeazaArtificii(dt);
+  stea.rotation.y = timp * 1.2;
+  haloStea.material.opacity = 0.75 + 0.25 * Math.sin(timp * 5);
+  luminaBrad.intensity = 26 + 8 * Math.sin(timp * 3);
+
+  if (pornit) {
+    programeazaMuzica();
+    actualizeazaVant(timp);
+    if (autoArtificii && timp > urmatoareaLansare) {
+      lanseazaRacheta();
+      urmatoareaLansare = timp + 1.2 + Math.random() * 2.8;
+    }
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(cadru);
+}
+cadru();
+window.__stare = () => ({ timp, rachete: rachete.length, vant, audio: ac ? ac.state : 'nepornit' });
+</script>
+<script>
+  // dacă biblioteca nu se încarcă (fără internet), afișează un mesaj clar
+  window.addEventListener('error', function (e) {
+    var el = document.getElementById('err');
+    el.style.display = 'block';
+    el.textContent = 'Eroare: ' + (e.message || 'biblioteca Three.js nu s-a putut încărca (verifică internetul).');
+  }, true);
+</script>
+</body>
+</html>
